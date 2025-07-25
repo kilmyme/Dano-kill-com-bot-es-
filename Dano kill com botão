@@ -1,0 +1,298 @@
+local player = game.Players.LocalPlayer
+local uis = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local settings = {
+    repeatamount = 1,
+    exceptions = {
+        "SayMessageRequest", "MeleeUpdateEvent", "NinjaBombEvent", "BulletUpdateEvent",
+        "CharacterSoundEvent", "PlayAnimation", "Animate", "MoveUpdate", "ServerPhysics",
+        "UpdateMovement", "Idle", "Run", "Jump", "Sit", "Climb", "Fall", "Swimming",
+        "GetUp", "FallingDown", "Ragdoll", "ToolEquipped", "ToolUnequipped"
+    }
+}
+
+repeat task.wait() until player.Character and (player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso"))
+local playerGui = player:WaitForChild("PlayerGui")
+
+_G.SpamEnabled = false
+_G.SpamRepeatAmount = 1
+_G.SpamTurbo = false
+local turboCooldown = false
+
+-- ✅ Função Anti Lag
+local function antiLag()
+    local character = player.Character
+    if not character then return end
+
+    for _, v in pairs(character:GetDescendants()) do
+        if v:IsA("Trail") or v:IsA("ParticleEmitter") then
+            v.Enabled = false
+        end
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.AutoRotate = true
+        humanoid.HipHeight = 2
+        humanoid.WalkSpeed = humanoid.WalkSpeed + 0.01
+    end
+
+    if workspace:FindFirstChildOfClass("Camera") then
+        workspace.CurrentCamera.CameraSubject = humanoid
+    end
+end
+
+task.defer(function()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SpamGui"
+    gui.ResetOnSpawn = false
+    gui.Parent = playerGui
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 150, 0, 35)
+    frame.Position = UDim2.new(0, 20, 1, -120)
+    frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    frame.BackgroundTransparency = 0.2
+    frame.Parent = gui
+
+    local minus = Instance.new("TextButton")
+    minus.Size = UDim2.new(0, 24, 1, 0)
+    minus.Position = UDim2.new(0, 0, 0, 0)
+    minus.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    minus.Text = "-"
+    minus.TextColor3 = Color3.new(1, 1, 1)
+    minus.Font = Enum.Font.GothamBold
+    minus.TextSize = 20
+    minus.Parent = frame
+
+    local main = Instance.new("TextButton")
+    main.Size = UDim2.new(0, 70, 1, 0)
+    main.Position = UDim2.new(0, 24, 0, 0)
+    main.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    main.TextColor3 = Color3.new(1, 1, 1)
+    main.Font = Enum.Font.GothamBold
+    main.TextSize = 13
+    main.Parent = frame
+
+    local plus = Instance.new("TextButton")
+    plus.Size = UDim2.new(0, 24, 1, 0)
+    plus.Position = UDim2.new(0, 94, 0, 0)
+    plus.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    plus.Text = "+"
+    plus.TextColor3 = Color3.new(1, 1, 1)
+    plus.Font = Enum.Font.GothamBold
+    plus.TextSize = 20
+    plus.Parent = frame
+
+    local turboBtn = Instance.new("TextButton")
+    turboBtn.Size = UDim2.new(0, 32, 1, 0)
+    turboBtn.Position = UDim2.new(0, 118, 0, 0)
+    turboBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    turboBtn.Text = "💀"
+    turboBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+    turboBtn.Font = Enum.Font.GothamBold
+    turboBtn.TextSize = 16
+    turboBtn.Parent = frame
+
+    local dragArea = Instance.new("Frame")
+    dragArea.Size = UDim2.new(1, 0, 1, 0)
+    dragArea.BackgroundTransparency = 1
+    dragArea.ZIndex = 10
+    dragArea.Parent = frame
+
+    local dragging, dragStart, startPos, currentInput = false, nil, nil, nil
+    local dragConfirmed = false
+
+    dragArea.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragStart = input.Position
+            startPos = frame.Position
+            dragConfirmed = false
+            dragging = false
+            currentInput = input
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragConfirmed = false
+                    currentInput = nil
+                end
+            end)
+        end
+    end)
+
+    uis.InputChanged:Connect(function(input)
+        if input == currentInput and dragStart then
+            local delta = input.Position - dragStart
+            if not dragConfirmed and (math.abs(delta.X) > 5 or math.abs(delta.Y) > 5) then
+                dragging = true
+                dragConfirmed = true
+            end
+            if dragging then
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                           startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+
+    local function update()
+        main.Text = (_G.SpamEnabled and "🔥 ON " or "🔥 OFF ") .. "(x" .. _G.SpamRepeatAmount .. ")"
+        main.BackgroundColor3 = _G.SpamEnabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+    end
+
+    update()
+
+    local function getCentralPart(character)
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp end
+        local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+        return torso
+    end
+
+    local currentFire = nil
+
+    local function clearFire()
+        if currentFire and currentFire.Parent then
+            currentFire:Destroy()
+            currentFire = nil
+        end
+    end
+
+    local function applyFire(color)
+        local character = player.Character
+        if not character then return end
+
+        local part = getCentralPart(character)
+        if not part then return end
+
+        clearFire()
+
+        local fire = Instance.new("Fire")
+        fire.Name = "CustomFireEffect"
+        fire.Heat = 5
+        fire.Size = 6
+        fire.Color = color
+        fire.SecondaryColor = color:lerp(Color3.new(1,1,1), 0.5)
+        fire.Parent = part
+
+        currentFire = fire
+    end
+
+    local function updateFireEffect()
+        if not _G.SpamEnabled then
+            clearFire()
+            return
+        end
+
+        if _G.SpamTurbo then
+            applyFire(Color3.fromRGB(0, 0, 0))
+        else
+            if _G.SpamRepeatAmount >= 2 and _G.SpamRepeatAmount <= 4 then
+                applyFire(Color3.fromRGB(0, 150, 255))
+            elseif _G.SpamRepeatAmount >= 5 and _G.SpamRepeatAmount <= 9 then
+                applyFire(Color3.fromRGB(170, 0, 255))
+            else
+                clearFire()
+            end
+        end
+    end
+
+    main.MouseButton1Click:Connect(function()
+        _G.SpamEnabled = not _G.SpamEnabled
+        _G.SpamTurbo = false
+        update()
+        updateFireEffect()
+        antiLag() -- ✅ Ativando Anti Lag
+    end)
+
+    plus.MouseButton1Click:Connect(function()
+        if _G.SpamRepeatAmount < 10 then
+            _G.SpamRepeatAmount += 1
+            update()
+            updateFireEffect()
+        end
+    end)
+
+    minus.MouseButton1Click:Connect(function()
+        if _G.SpamRepeatAmount > 1 then
+            _G.SpamRepeatAmount -= 1
+            update()
+            updateFireEffect()
+        end
+    end)
+
+    turboBtn.MouseButton1Click:Connect(function()
+        if turboCooldown then return end
+        turboCooldown = true
+        _G.SpamTurbo = true
+        _G.SpamEnabled = true
+        _G.SpamRepeatAmount = 10
+        update()
+        updateFireEffect()
+        antiLag() -- ✅ Ativando Anti Lag
+        task.delay(4, function()
+            _G.SpamTurbo = false
+            _G.SpamEnabled = false
+            _G.SpamRepeatAmount = 1
+            turboCooldown = false
+            update()
+            updateFireEffect()
+        end)
+    end)
+
+    local function isException(name)
+        for _, exc in pairs(settings.exceptions) do
+            if string.find(name, exc) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function shouldRepeat(name)
+        local movementEvents = {
+            "MoveUpdate", "UpdateMovement", "ServerPhysics",
+            "CharacterSoundEvent", "PlayAnimation", "Animate"
+        }
+        for _, mEvent in pairs(movementEvents) do
+            if string.find(name, mEvent) then
+                return false
+            end
+        end
+        return true
+    end
+
+    local success, err = pcall(function()
+        local mt = getrawmetatable(game)
+        local old = mt.__namecall
+        setreadonly(mt, false)
+
+        mt.__namecall = function(self, ...)
+            local args = {...}
+            local method = getnamecallmethod()
+            if isException(self.Name) then
+                return old(self, ...)
+            end
+            if _G.SpamEnabled and (method == "FireServer" or method == "InvokeServer") and shouldRepeat(self.Name) then
+                for i = 1, _G.SpamRepeatAmount do
+                    old(self, unpack(args))
+                end
+                return
+            end
+            return old(self, ...)
+        end
+
+        setreadonly(mt, true)
+    end)
+
+    if not success then
+        warn("Erro ao aplicar hook: " .. tostring(err))
+    end
+
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        updateFireEffect()
+    end)
+end)
